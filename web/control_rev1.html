@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>IOT Dashboard - Interactive RGB Mixer</title>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" type="text/css" href="bower_components/bootstrap/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" type="text/css" href="bower_components/snackbarjs/dist/snackbar.min.css">
+    <link rel="stylesheet" type="text/css" href="bower_components/titatoggle/dist/titatoggle-dist-min.css">
+    <link rel="stylesheet" type="text/css" href="bower_components/bootstrap-material-design/dist/css/roboto.min.css">
+    <link rel="stylesheet" type="text/css" href="bower_components/bootstrap-material-design/dist/css/ripples.min.css">
+    <link rel="stylesheet" type="text/css" href="bower_components/bootstrap-material-design/dist/css/material-fullpalette.min.css">
+    <style>
+        .toggle-btn {
+            margin: 10px;
+            width: 150px;
+            font-size: 16px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container text-center" style="padding-top: 30px;">
+        <h1>RGB Color Mixer (Toggle Switches)</h1>
+
+        <div style="margin: 15px 0; font-size: 18px;">
+            <div><strong>Broker:</strong> <span id="broker-name">-</span></div>
+            <div><strong>Topic:</strong> <span id="topic-name">-</span></div>
+        </div>
+
+        <div style="margin: 15px 0;">
+            <span id="connection-status" class="label label-danger" style="font-size: 16px;">Disconnected</span>
+        </div>
+        <button class="btn btn-material-green-500" id="connect-button">Connect</button>
+        <button class="btn btn-material-red-500" id="disconnect-button" disabled>Disconnect</button>
+        <hr>
+
+        <h3>สวิตช์ผสมสี (กดเพื่อเปิด/ปิดแต่ละสี)</h3>
+        <div style="margin-top: 20px;">
+            <button class="btn btn-material-grey-400 toggle-btn" id="btn-red" data-color="r">RED: OFF</button>
+            <button class="btn btn-material-grey-400 toggle-btn" id="btn-green" data-color="g">GREEN: OFF</button>
+            <button class="btn btn-material-grey-400 toggle-btn" id="btn-blue" data-color="b">BLUE: OFF</button>
+        </div>
+        
+        <br>
+        <button class="btn btn-material-grey-800" id="btn-off-all" style="width: 180px;">OFF ALL</button>
+    </div>
+
+    <script type="text/javascript" src="bower_components/jquery/dist/jquery.min.js"></script>
+    <script src="mqttws31.js" type="text/javascript"></script>
+    <script type="text/javascript" src="bower_components/bootstrap/dist/js/bootstrap.min.js"></script>
+    <script type="text/javascript" src="bower_components/snackbarjs/dist/snackbar.min.js"></script>
+    <script type="text/javascript" src="bower_components/bootstrap-material-design/dist/js/material.min.js"></script>
+    <script type="text/javascript" src="bower_components/bootstrap-material-design/dist/js/ripples.min.js"></script>
+    <script type="text/javascript">
+        $(function() {
+            $.material.init();
+//***************************************************************************************************************************//
+            var MQTTbroker = 'mqtt-dashboard.com';
+            var MQTTport = 8884;
+            var MQTTpublishTopic = '68070032/LED';
+
+            $('#broker-name').text(MQTTbroker + ':' + MQTTport);
+            $('#topic-name').text(MQTTpublishTopic);
+
+            var client = new Paho.MQTT.Client(MQTTbroker, MQTTport, "clientId-rgb-toggle-" + parseInt(Math.random() * 1000, 10));
+            var isConnected = false;
+
+            // ตัวแปรเก็บสถานะการเปิด/ปิด ของแต่ละสี (0 = OFF, 1 = ON)
+            var rgbState = { r: 0, g: 0, b: 0 };
+
+            function updateConnectionStatus(connected, message) {
+                isConnected = connected;
+                $('#connection-status').text(message || (connected ? 'Connected' : 'Disconnected'))
+                    .toggleClass('label-success', connected)
+                    .toggleClass('label-danger', !connected);
+                $('#connect-button').prop('disabled', connected);
+                $('#disconnect-button').prop('disabled', !connected);
+                $('.toggle-btn, #btn-off-all').prop('disabled', !connected);
+            }
+
+            client.onConnectionLost = function (responseObject) {
+                updateConnectionStatus(false, 'Disconnected');
+            };
+
+            $('#connect-button').click(function () {
+                if (!isConnected) {
+                    updateConnectionStatus(false, 'Connecting...');
+                    client.connect({
+                        timeout: 3,
+                        onSuccess: function () { updateConnectionStatus(true, 'Connected'); },
+                        onFailure: function () { updateConnectionStatus(false, 'Connection Failed'); }
+                    });
+                }
+            });
+
+            $('#disconnect-button').click(function () {
+                if (isConnected) {
+                    client.disconnect();
+                    updateConnectionStatus(false, 'Disconnected');
+                }
+            });
+
+            // ฟังก์ชันอัปเดตสีของปุ่มตามสถานะ ON/OFF
+            function updateUI() {
+                // RED Button
+                if (rgbState.r === 1) {
+                    $('#btn-red').text('RED: ON').removeClass('btn-material-grey-400').addClass('btn-material-red-500');
+                } else {
+                    $('#btn-red').text('RED: OFF').removeClass('btn-material-red-500').addClass('btn-material-grey-400');
+                }
+
+                // GREEN Button
+                if (rgbState.g === 1) {
+                    $('#btn-green').text('GREEN: ON').removeClass('btn-material-grey-400').addClass('btn-material-green-500');
+                } else {
+                    $('#btn-green').text('GREEN: OFF').removeClass('btn-material-green-500').addClass('btn-material-grey-400');
+                }
+
+                // BLUE Button
+                if (rgbState.b === 1) {
+                    $('#btn-blue').text('BLUE: ON').removeClass('btn-material-grey-400').addClass('btn-material-blue-500');
+                } else {
+                    $('#btn-blue').text('BLUE: OFF').removeClass('btn-material-blue-500').addClass('btn-material-grey-400');
+                }
+            }
+
+            // ฟังก์ชันส่งค่าสถานะ RGB ปัจจุบันไปยัง MQTT Broker
+            function publishRGBState() {
+                if (!isConnected) {
+                    $.snackbar({content: 'กรุณา Connect ก่อนใช้งาน'});
+                    return;
+                }
+
+                var payloadStr = JSON.stringify(rgbState);
+                var message = new Paho.MQTT.Message(payloadStr);
+                message.destinationName = MQTTpublishTopic;
+                client.send(message);
+
+                $.snackbar({content: 'Published: ' + payloadStr});
+                updateUI();
+            }
+
+            // เมื่อกดสวิตช์ปุ่มแม่สีแต่ละสี
+            $('.toggle-btn').click(function() {
+                var colorKey = $(this).data('color');
+                // สลับสถานะ 0 เป็น 1 หรือ 1 เป็น 0
+                rgbState[colorKey] = (rgbState[colorKey] === 1) ? 0 : 1;
+                publishRGBState();
+            });
+
+            // ปุ่มลัดสำหรับปิดไฟทุกสี
+            $('#btn-off-all').click(function() {
+                rgbState.r = 0;
+                rgbState.g = 0;
+                rgbState.b = 0;
+                publishRGBState();
+            });
+        });
+    </script>
+</body>
+</html>
