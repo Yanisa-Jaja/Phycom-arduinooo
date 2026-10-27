@@ -1,47 +1,82 @@
 #include <WiFiS3.h>
 #include <MQTTClient.h>
-/*************************************************************************************************************** */
+
 const char WIFI_SSID[] = "Java";
 const char WIFI_PASSWORD[] = "29122549";
 
-const char MQTT_BROKER_ADRRESS[] = "mqtt-dashboard.com";
-// FIX: Arduino ใช้ WiFiClient (TCP ธรรมดา) ต้องใช้พอร์ต 1883
-// พอร์ต 8884 เป็น WebSocket+TLS สำหรับเว็บเบราว์เซอร์เท่านั้น
-const int MQTT_PORT = 1883;
-const char MQTT_CLIENT_ID[] = "jaja-uno-68070032";  // ห้ามซ้ำกับ client อื่น
+const char MQTT_BROKER_ADRRESS[] = "phycom.it.kmitl.ac.th";
+const int MQTT_PORT = 1883;  // Arduino ใช้ TCP ธรรมดา
+const char MQTT_CLIENT_ID[] = "jaja-uno-68070032";
 const char MQTT_USERNAME[] = "";
 const char MQTT_PASSWORD[] = "";
 
-const char PUBLISH_TOPIC[] = "68070032/temp";    // Arduino -> ส่งออก
-const char SUBSCRIBE_TOPIC[] = "68070032/temp";      // รับคำสั่งจากหน้าเว็บ (ตรงกับ HTML)
-
-const int PUBLISH_INTERVAL = 5000;
+const char PUBLISH_TOPIC[] = "68070032/temp";
+const int PUBLISH_INTERVAL = 5000;  // ส่งทุก 5 วินาที
 
 WiFiClient network;
 MQTTClient mqtt = MQTTClient(256);
 
 unsigned long lastPublishTime = 0;
-
-int voltage = A0;
+const int voltage = A0;
 
 void setup() {
   Serial.begin(9600);
   pinMode(voltage, INPUT);
+
+  int status = WL_IDLE_STATUS;
+  while (status != WL_CONNECTED) {
+    Serial.print("Attempting to connect to SSID: ");
+    Serial.println(WIFI_SSID);
+    status = WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    delay(10000);
+  }
+
+  Serial.print("IP Address: ");
+  Serial.println(WiFi.localIP());
+
+  mqtt.begin(MQTT_BROKER_ADRRESS, MQTT_PORT, network);
+  connectToMQTT();
 }
 
 void loop() {
-  int rawVal = analogRead(voltage);
-if (rawVal >= 1023) rawVal = 1022;
+  mqtt.loop();
 
-  float R_fixed = 10000.0;
-  
-  float R_th = R_fixed * ((float)rawVal / (1023.0 - rawVal));
+  if (!mqtt.connected()) {
+    connectToMQTT();
+  }
 
-  float beta = 3950.0;     // ค่า Beta ของ Thermistor
-  float r0 = 10000.0;      // ค่า R ที่ 25 C
-  float t0 = 298.15;       // 25 C ในหน่วย Kelvin
+  if (millis() - lastPublishTime > PUBLISH_INTERVAL) {
+    sendToMQTT();
+    lastPublishTime = millis();
+  }
+}
 
-  float tempK = 1.0 / ((1.0 / t0) + (1.0 / beta) * log(R_th / r0));
-  float tempC = tempK - 273.15;
-  Serial.print(tempC);
+void connectToMQTT() {
+  Serial.print("Connecting to MQTT broker");
+  while (!mqtt.connect(MQTT_CLIENT_ID, MQTT_USERNAME, MQTT_PASSWORD)) {
+    Serial.print(".");
+    delay(500);
+  }
+  Serial.println();
+  Serial.println("MQTT broker Connected!");
+}
+
+float readTemperature() {
+  int val = analogRead(voltage);
+  float voltage = (val * 5.0) / 1023.0;
+  float tempC = (voltage - 0.5) * 100.0;
+  return tempC;   // แปลงจากเคลวินเป็นเซลเซียส
+}
+
+void sendToMQTT() {
+  float tempC = readTemperature();
+
+  char messageBuffer[16];
+  String(tempC, 1).toCharArray(messageBuffer, 16);  // เช่น "27.4"
+  mqtt.publish(PUBLISH_TOPIC, messageBuffer);
+
+  Serial.print("sent to ");
+  Serial.print(PUBLISH_TOPIC);
+  Serial.print(": ");
+  Serial.println(messageBuffer);
 }
