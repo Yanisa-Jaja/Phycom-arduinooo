@@ -21,7 +21,7 @@ const int potPin = A0;
 
 void setup() {
   Serial.begin(9600);
-  pinMode(voltage, INPUT);
+  pinMode(potPin, INPUT);
 
   int status = WL_IDLE_STATUS;
   while (status != WL_CONNECTED) {
@@ -65,12 +65,15 @@ float read() {
   int potValue = analogRead(potPin); // Read the value from the Potentiometer
 
   // Scale the potValue directly
-  return potValue  // Scale down from 0-1023 to 0-255
+  return potValue ; // Scale down from 0-1023 to 0-255
   
 }
 
 void sendToMQTT() {
   float tempC = read();
+  char messageBuffer[16];
+  String(tempC, 1).toCharArray(messageBuffer, 16);  // เช่น "27.4"
+  mqtt.publish(PUBLISH_TOPIC, messageBuffer);
 
   Serial.print("sent to ");
   Serial.print(PUBLISH_TOPIC);

@@ -68,9 +68,9 @@ float readTemperature() {
 void sendToMQTT() {
   float tempC = readTemperature();
 
-  char messageBuffer[16];
+  /*char messageBuffer[16];
   String(tempC, 1).toCharArray(messageBuffer, 16);  // เช่น "27.4"
-  mqtt.publish(PUBLISH_TOPIC, messageBuffer);
+  mqtt.publish(PUBLISH_TOPIC, messageBuffer);*/
 
   Serial.print("sent to ");
   Serial.print(PUBLISH_TOPIC);
